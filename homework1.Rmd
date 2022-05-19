@@ -6,15 +6,16 @@ output: github_document
 
 #### 1. What factors do you think one should incorporate in the demand function? Please, discuss.
 
-Considering porter's 5 forces model, I believe factors to include in the demand function include:
+Considering porter's 5 forces model, I believe factors for the demand function include:
 
 + price of product - the higher the price the less the willingness to buy the less the demand, 
 + consumer's preferences - loyalty to goods increases spending and demand, 
 + consumer's income - an increase in disposable income enabling consumers to be able to afford more goods, 
++ competitors: competing or cannibalizing products are important as promotions of one brand can affect another brand greatly 
 + availability of substitutes - an increase in the price of a product will increase the demand for its major substitutes, 
 + complements - a fall in price of complements will increase demand, 
 + market size / consumer base - economy of scale can bring down costs and increase demand, 
-+ seasonality - weather could drive seasonal demand, and trends - economic cycle and more. 
++ seasonality - weather could drive seasonal demand, and trends - economic cycle, pandemic impacts which could shift consumers behavior / need to a large extent, or more 
 
 ### Estimation - Single Item Model
 
@@ -60,22 +61,27 @@ summary(lm2)
 ```
 
 (ii)the value of R-squared and MAPE
-```{r}
-# extract R-squared parameter from summary ###to update for testing set but not training set
-summary(lm1)$r.squared #0.6114079
-summary(lm2)$r.squared #0.9521644
-```
 
 ```{r}
  # make predictions on test data
 lm1_predict=predict(lm1,test)
 lm2_predict=predict(lm2,test)
 
+RSQUARE = function(y_actual,y_predict){
+  cor(y_actual,y_predict)^2
+}
+# R-squared on the test set
+RSQUARE(test$St,exp(lm1_predict)) #0.3247033
+RSQUARE(test$St,exp(lm2_predict)) #0.9355876
+```
+
+```{r}
 # compute MAPE
 library(MLmetrics)
-MAPE(lm1_predict, log(test$St)) #0.1071977
-MAPE(lm2_predict, log(test$St)) #0.02063047
+MAPE(exp(lm1_predict), test$St) #0.8887861
+MAPE(exp(lm2_predict), test$St) #0.1133623
 ```
+
 
 #### 3. For the model in equation (2), what can you say on the magnitudes of the estimated parameters
 
@@ -171,20 +177,20 @@ for(i in 1:5){
 
 (ii)the value of R-squared and MAPE
 ```{r}
-for(i in 1:5){
-  # extract R-squared parameter from summary ###to update for testing set but not training set
-  print(summary(get(paste0("lm",i)))$r.squared)
-}
-```
-
-```{r}
 library(MLmetrics)
 attach(test)
 for(i in 1:5){
   # make predictions on test data
   assign(paste0("lm",i,"_predict"), predict(get(paste0("lm",i)),test))
+  # compute R-squared on the test set
+  print(RSQUARE(get(paste0("S",i,"_t")),exp(get(paste0("lm",i,"_predict")))))
+}
+```
+
+```{r}
+for(i in 1:5){
   # compute MAPE
-  print(MAPE(get(paste0("lm",i,"_predict")), get(paste0("S",i,"_t"))))
+  print(MAPE(exp(get(paste0("lm",i,"_predict"))), get(paste0("S",i,"_t"))))
 }
 ```
 
@@ -237,20 +243,20 @@ for(i in 1:5){
 
 (ii)the value of R-squared and MAPE
 ```{r}
-for(i in 1:5){
-  # extract R-squared parameter from summary ###to update for testing set but not training set
-  print(summary(get(paste0("new_lm",i)))$r.squared)
-}
-```
-
-```{r}
 library(MLmetrics)
 attach(test)
 for(i in 1:5){
   # make predictions on test data
-  assign(paste0("new_lm",i,"_predict"), predict(get(paste0("new_lm",i)),test))
+  assign(paste0("lm",i,"_predict"), predict(get(paste0("lm",i)),test))
+  # compute R-squared on the test set
+  print(RSQUARE(get(paste0("S",i,"_t")),exp(get(paste0("lm",i,"_predict")))))
+}
+```
+
+```{r}
+for(i in 1:5){
   # compute MAPE
-  print(MAPE(get(paste0("new_lm",i,"_predict")), get(paste0("S",i,"_t"))))
+  print(MAPE(exp(get(paste0("lm",i,"_predict"))), get(paste0("S",i,"_t"))))
 }
 ```
 
@@ -339,19 +345,89 @@ From the above estimation, we can see that the demand of setting the price of br
 
 #### 9. Compare the estimated parameters from Questions 6 and 7. What is the difference between the 5 brands from Question 6 and the 5 brands from Question 7? Please, discuss.
 
+![an image caption: comparison of estimates of 5 brands from Q6 and Q7](estimates.png)
+Exhibit - Table comparison of estimates of the 5 brands from Q6 and Q7
 
+In general, the 5 brands in part 1 have higher average demands and lower variance / standard deviation than part 2. Potentially part 1 brands having more diverse intercepts target more niche market respectively or clear differentiation of same product across brands that the price of brand affecting another brand is less significant than part 2. It is observed that the parameters sigma are of higher magnitude in part 2 and part 2 brands are more like substitute in which price of a brand would affect the demand of another brand easily. From p-values, we can also observe significance for most part 1 parameters sigma but only for those high magnitude ones in part 2. This further supports more difference between 5 brands in part 1 in comparison to part 2.
 
 ### Optimization Formulation
 
 #### 10. What types of objectives would you consider? Please discuss.
+In the formulation of optimization problem, we can set the objective function as
+* maximizing the sum of product of price multiplied by the demand of 5 similar items from different brands
+* maximizing the sum of demand or log of demand of all 5 brands
+* maximizing the sum of demand of one targeted brand while adhering to rule-based decisions for other brands such as certain thresholds
+* any other promotion strategy like promoting based on prevailing offers or strategic partnership with certain brand, that can potentially maximize revenue beyond product level to departmental or company level
+
 
 #### 11. How can one represent such a restriction using linear constraints and binary variables?
 
+The formulation of the optimization problem is confined to the following constraints. 
+
+1. normalized laddered price of SKU which can take only four values - x1 at full price, x0.9 at 10% promotion, x0.8 at 20% promotion and x0.7 at 30% promotion
+
+$$p_{t}=(a^{k=1}_{t})+0.9(a^{k=2}_{t})+0.8(a^{k=3}_{t})+0.7(a^{k=4}_{t})$$
+2. each price can be used once only
+
+$$\sum\limits_{k=1}^{4}a^{k}_{t} \text{=1 }\forall{t}$$
+
+3. binary decision variables for price ladder - 1 denotes a promotion strategy is selected
+
+$$a^{k}_{t}=\text{{0,1} }\forall{t},{k}$$
+
 #### 12. How can you model this business rule as a linear constraint with binary variables?
+
+The formulation of the optimization problem is confined to constraint on at most 4 promotions. 
+$$ \sum\limits_{t=1}^{T}\sum\limits_{k=1}^{4}a^{k}_{t}<=4$$
+where T is the number of periods
 
 #### 13. Please, formulate the optimization problem with the constraint on the limitation of the number of promotions to be at most 4
 
+In the formulation of optimization problem, we are going to set the objective function as maximizing the sum of product of profits (which is the price minus cost) multiplied by the demand of 5 similar items from different brands
+
+$$ \text{maximize }\sum\limits_{t=1}^{13}\displaystyle\sum\limits_{i=1}^{5}(p^{i}_{t}-c^{i}_{t})d^{i}_{t}$$
+where $$p^{i}_{t}$$, $$c^{i}_{t}$$ and $$d^{i}_{t}$$ is the price, cost and demand for brand $$i$$ during week $$t$$ respectively in reference to model(3). 
+
+The formulation of the optimization problem is confined to the following constraints. 
+
+1. normalized price of SKU which can take only four values - x1 at full price, x0.9 at 10% promotion, x0.8 at 20% promotion and x0.7 at 30% promotion
+$$p_{t}=(a^{k=1}_{t})+0.9(a^{k=2}_{t})+0.8(a^{k=3}_{t})+0.7(a^{k=4}_{t})$$
+
+2. each price can be used once only
+$$\sum\limits_{k=1}^{4}a^{k}_{t} \text{=1 }\forall{t}$$
+
+3. binary decision variables - 1 denotes a promotion strategy is selected
+$$a^{k}_{t}=\text{{0,1} }\forall{t},{k}$$
+
 #### 14. What tests would you conduct in order to check that the suggested prices are robust? Please discuss.
 
+The optimization problem solution has solved 4 promotions each by 30% during 13 weeks as follows. The duration of promotion is the same across for 2 weeks. The frequency of promotion is once in 2 months at the beginning and increased to once a month and once every 2 weeks, i.e. more often towards the end of quarter to boost demand and sales. 
+
+We can conduct hypothesis testing to check that the suggested price is robust, by assuming the null hypothesis that the price is robust and alternative hypothesis the otherwise. From statistics, we can compute and mean and standard deviation of the price and p-value of mean. If p is greater than the critical threshold, we can reject the null in favor of the alternative, i.e. the price is not robust. 
+
+Another testing approach could be A/B testing that runs different products within the same category type or different customers within the same product to collect demand data on various pricing. From sales conversion we can hence figure out the optimal price points and conclude whether the suggested prices are robust. 
+
+Based on the concept of exploration and exploitation, we can consider to adjust the observation and prediction windows for training the optimization model to continuously fine-tune the optional prices, run empirical testing and update the above test strategy accordingly. More frequent revisit of suggested price is recommended. 
+
+ 
+![an image caption: Suggested prices for one SKU for the coming quarter](suggestedprice.png)
+
 #### 15. Should the promotions of the different items be at the same time, or at different times? Please discuss the various factors that may affect the answer to this question.
+
+The are both pros and cons in promoting different items simultaneously and at different times. If promoting different items simultaneously, a grocery store can enjoy synergies of promotional effect to produce greater noises to attract consumers and enhance the exposure compared to other grocery competitors. This kind of big sale can be a good differentiator and secure greater demand in the market. Big spending would be encouraged during sales periods. 
+
+On the contrary, promoting different items at different times allows more optimized sales and revenue by pricing right to the demand. The lost revenue captured can fund other marketing activities to compensate for the buzz effect promoting simultaneously. To consumers, this can provide some affordable option for most of the time and encourage smaller but more frequent spending. 
+
+The better strategy could be formulated based on the following considerations. 
+
++ overall grocery's branding and pricing strategies - subject to the market positioning, a grocery store could be more economical / more premium, with high pricing big promotion / low pricing with fewer promotions, etc. The grocery store shall consider the marketing objective of such promotions to overall grocery image and the business priority on other benefits (e.g. customer loyalty) against revenue. 
+
++ demand of brands - we want to understand if the demand of items are correlated that one brand's promotion would effect the demand of another brand item. More specifically, if products are substitute to each other, their demand are negatively correlated and promoting simultaneously is not optimal. If products are complementary, it can be bundled offer that boosts demand and generates increased sales. 
+
++ partnership with brands - sometimes promotions are constrained to contracts with suppliers. Strategic partners might require exclusive treatment or price protection to secure their brand images. Such constraints shall be considered in the optimization problem for both simultaneous and different times promotion and may pose different extent of effect. 
+
++ consumers behaviors and trends - consumers behaviors e.g. purchase volume, frequency, and recency, as well as whether they are willing to pill stocks on the items would impact our promotion decision. Trends like growing or shrinking market, seasonal effect (black Friday sale is expected by most consumers, end of season sale to clear inventory) and pandemic situation shall be incorporated into the optimization problem. Analysis on historical purchasing behaviors could reveal more insights on demand (especially the simultaneous effect), hypothesis to test out and higher accuracy in demand forecast before concluding the best promotion strategy. 
+
+
+
 
